@@ -17,9 +17,10 @@ module GhciSandbox
 
 where
 
-import           EnumGen.EnumParser         (enumq)
+import           EnumGen.EnumParser         (enumParser, enumq)
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax (Quasi, addTopDecls, returnQ, runQ)
+import           Text.Parsec
 
 
 testDecl =
@@ -43,11 +44,18 @@ testDecl =
     |]
 
 
-[enumq|
+{-[enumq|
     enum EnTest Manual
         1:EnTstOne
         2:EnTstTwo
         10:EnTstTen
+|]-}
+
+[enumq|
+    enum SeqEnTest Seq 10 20
+        SeqEnTstOne
+        SeqEnTstTwo
+        SeqEnTstTen
 |]
 
 {-

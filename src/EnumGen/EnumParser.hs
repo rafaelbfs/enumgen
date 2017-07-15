@@ -29,12 +29,13 @@ import           Language.Haskell.TH.Lib    (integerL)
 import           Language.Haskell.TH.Quote
 import           Language.Haskell.TH.Syntax (liftString, returnQ, runQ)
 import           Text.Parsec                (ParseError, ParsecT, Stream, many,
-                                             many1, optionMaybe, parse, (<|>))
+                                             many1, optionMaybe, parse, sepBy,
+                                             skipMany1, (<|>))
 import           Text.Parsec.Char           (char, digit, endOfLine, letter,
                                              spaces, string, upper)
 import           Text.Parsec.String         (Parser)
 
-data EnumIdType = Auto | Manual deriving (Show, Eq)
+data EnumIdType = Auto | Manual | Seq Int Int deriving (Show, Eq)
 
 
 data EnumDecl = EnumDecl{declName ::String, idType::EnumIdType} deriving (Show, Eq)
@@ -49,16 +50,31 @@ ename = (:) <$> upper <*> many (letter <|> digit <|> char '_')
 uint:: Parser Int
 uint = read <$> many1 digit
 
+nspaces:: Parser ()
+nspaces = skipMany1 (char ' ')
+
 maybeid:: Parser EnumIdType
-maybeid = fromMaybe Auto <$> optionMaybe ((string "Manual" *> return Manual) <|> (string "Auto" *> return Auto))
+maybeid = fromMaybe Auto <$> optionMaybe ((string "Manual" *> return Manual) <|> (string "Auto" *> return Auto) <|> (string "Seq" *> parseSeq))
+
+parseSeq:: Parser EnumIdType
+parseSeq = do
+    ints <- nspaces *> uint `sepBy` nspaces
+    return $ getSeq ints
+    where
+        getSeq:: [Int] -> EnumIdType
+        getSeq (a1:a2:xs) = Seq a1 a2
+        getSeq [a1]       = Seq a1 1
+        getSeq []         = Seq 1 1
+
 
 edecl:: Parser EnumDecl
 edecl = EnumDecl <$> (spaces *> string "enum" *> spaces *> ename <* spaces)  <*> maybeid
 
 eitem:: EnumDecl -> Parser EnumItem
 eitem EnumDecl{idType = idt} = case idt of
-    Auto   -> EItem <$> (spaces *> return 0) <*> ename <* spaces
     Manual -> EItem <$> (spaces *> (uint <* char ':')) <*> ename <* spaces
+    _      -> EItem <$> (spaces *> return 0) <*> ename <* spaces
+
 
 enumParser:: Parser EnumAR
 enumParser = do
@@ -96,8 +112,9 @@ buildExpr ar = do
 
         buildIdList:: [EnumItem] -> [Int]
         buildIdList its = case iType of
-            Auto   ->   [1 .. (length its)] ++ [- 1]
-            Manual ->   map itemId its ++ [- 1]
+            Auto           ->   [1 .. (length its)] ++ [- 1]
+            Manual         ->   map itemId its ++ [- 1]
+            Seq start step -> [x * step + start | x <- [0 .. (length its - 1)]] ++ [- 1]
         idNames::EnumAR -> [(Int, Name)]
         idNames EnumAR{items = is} = zip (buildIdList is) (itemsConNames dName is)
         mkFromEnumPat::(Int, Name) -> Clause
