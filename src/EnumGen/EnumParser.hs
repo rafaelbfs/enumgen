@@ -1,7 +1,3 @@
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-
 {-
    Copyright 2017 Rafael Felix
 
@@ -12,6 +8,11 @@
        http://www.apache.org/licenses/LICENSE-2.0
 
 -}
+
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-missing-fields #-}
 
 module EnumGen.EnumParser (
     enumParser, EnumAR(..), EnumDecl(..), EnumIdType(..), EnumItem(..), enumq
@@ -77,16 +78,21 @@ buildExpr ar = do
     fromEnumName <- fmap fromJust $ lookupValueName "fromEnum"
     toEnumName <- fmap fromJust $ lookupValueName "toEnum"
     showName <- fmap fromJust $ lookupTypeName "Show"
+    intName <- fmap fromJust $ lookupTypeName "Int"
     returnQ [DataD [] enumName [] Nothing consList [ConT showName],
         InstanceD Nothing [] (AppT (ConT enumClassName) (ConT enumName))
         [FunD fromEnumName $ map mkFromEnumPat (idNames ar) ,
-        FunD toEnumName $ map mkToEnumPat (idNames ar) ]]
+        FunD toEnumName $ map mkToEnumPat (idNames ar) ],
+        SigD funName (AppT (AppT ArrowT (ConT intName)) (ConT enumName)),
+        FunD funName [Clause [VarP paramName] (NormalB (SigE (AppE (VarE toEnumName) (VarE paramName )) (ConT enumName))) []]]
     where
         dName = declName $ decl ar
         iType = idType $ decl ar
         enumName = mkName dName
         namesList = itemsConNames dName $ items ar
         consList = itemsConsT namesList
+        funName = mkName $ "to" ++ dName
+        paramName = mkName "pEid"
 
         buildIdList:: [EnumItem] -> [Int]
         buildIdList its = case iType of
